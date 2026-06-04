@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amd-smi-wsl"
+version = "0.1.0"
+description = "Drop-in amdsmi replacement for WSL2 / Windows (HIP + Windows interop backed)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "kangletian" }]
+keywords = ["amdsmi", "amd-smi", "rocm", "wsl2", "wsl", "hip", "gpu", "vllm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: GPU",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Hardware",
+]
+dependencies = []
+
+[project.optional-dependencies]
+# torch is the runtime data source but is intentionally NOT a hard dependency:
+# it is already present in any ROCm/vLLM environment and pinning it here would
+# fight the user's existing install.
+test = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/JoursBleu/amd-smi-wsl"
+Issues = "https://github.com/JoursBleu/amd-smi-wsl/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+amdsmi = ["py.typed"]
