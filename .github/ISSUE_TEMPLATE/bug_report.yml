@@ -1,0 +1,39 @@
+name: Bug report
+description: Report a problem with amd-smi-wsl
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Describe the problem and the full traceback.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "Windows 11 + WSL2 Ubuntu 24.04"
+    validations:
+      required: true
+  - type: input
+    id: rocm
+    attributes:
+      label: ROCm version
+      placeholder: "7.2"
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU model
+      placeholder: "Radeon 8060S (gfx1151)"
+    validations:
+      required: true
+  - type: input
+    id: hip
+    attributes:
+      label: torch.version.hip
+      description: Output of `python -c "import torch; print(torch.version.hip)"`
+    validations:
+      required: false
