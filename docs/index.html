@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>amd-smi-wsl — drop-in amdsmi for WSL2 / Windows</title>
+<meta name="description" content="A drop-in replacement for the amdsmi Python package that works inside WSL2 / Windows, where the native AMD SMI library cannot run. Makes vLLM and other ROCm tools detect the GPU on WSL2." />
+<meta property="og:title" content="amd-smi-wsl" />
+<meta property="og:description" content="Drop-in amdsmi for WSL2 / Windows — restores the amdsmi import surface on /dev/dxg so vLLM & friends work." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐧</text></svg>" />
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-soft: #161b22;
+    --bg-card: #1c2230;
+    --border: #2d3748;
+    --fg: #e6edf3;
+    --fg-dim: #9aa7b4;
+    --accent: #ed1c24;       /* radeon-ish red */
+    --accent2: #ff7a18;
+    --green: #3fb950;
+    --code-bg: #0b0f14;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
+  code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
+
+  /* hero */
+  header.hero {
+    background:
+      radial-gradient(1200px 500px at 80% -10%, rgba(237,28,36,0.18), transparent 60%),
+      radial-gradient(900px 400px at 10% 0%, rgba(255,122,24,0.12), transparent 55%),
+      var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 70px 0 56px;
+    text-align: center;
+  }
+  .badge-row { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:26px; }
+  .badge-row img { height: 22px; }
+  h1 { font-size: clamp(2.4rem, 6vw, 3.6rem); margin: 0 0 8px; letter-spacing: -1px; }
+  h1 .mono { font-family: "SFMono-Regular", Consolas, monospace; }
+  .tagline { font-size: clamp(1.05rem, 2.4vw, 1.35rem); color: var(--fg-dim); max-width: 720px; margin: 0 auto 30px; }
+  .cta { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
+  .btn {
+    display:inline-block; padding: 12px 26px; border-radius: 999px; font-weight: 600;
+    border: 1px solid var(--border); color: var(--fg); background: var(--bg-card);
+    transition: transform .12s ease, border-color .12s ease;
+  }
+  .btn:hover { text-decoration:none; transform: translateY(-2px); border-color: var(--accent2); }
+  .btn.primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); border:none; color:#fff; }
+
+  .install {
+    margin: 34px auto 0; max-width: 460px; background: var(--code-bg);
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+  }
+  .install code { color: var(--green); font-size: 1.05rem; }
+  .copy-btn { background: var(--bg-soft); border:1px solid var(--border); color: var(--fg-dim);
+    border-radius:8px; padding:6px 12px; cursor:pointer; font-size:.85rem; }
+  .copy-btn:hover { color: var(--fg); border-color: var(--accent2); }
+
+  section { padding: 56px 0; border-bottom: 1px solid var(--border); }
+  section h2 { font-size: 1.8rem; margin: 0 0 8px; }
+  section .sub { color: var(--fg-dim); margin: 0 0 30px; }
+
+  .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap: 18px; }
+  .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+  .card h3 { margin: 0 0 8px; font-size: 1.15rem; }
+  .card p { margin: 0; color: var(--fg-dim); font-size: .96rem; }
+  .card .ico { font-size: 1.6rem; margin-bottom: 10px; display:block; }
+
+  pre.code { background: var(--code-bg); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; overflow-x: auto; font-size: .92rem; }
+  pre.code .c { color: #6e7781; }
+  pre.code .k { color: #ff7b72; }
+  pre.code .s { color: #a5d6ff; }
+  pre.code .f { color: #d2a8ff; }
+
+  table { width:100%; border-collapse: collapse; font-size: .95rem; background: var(--bg-card);
+    border:1px solid var(--border); border-radius: var(--radius); overflow:hidden; }
+  th, td { text-align:left; padding: 11px 16px; border-bottom: 1px solid var(--border); }
+  th { background: var(--bg-soft); color: var(--fg-dim); font-weight:600; }
+  tr:last-child td { border-bottom:none; }
+  td.ok { color: var(--green); font-family: monospace; }
+
+  .why-flow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; color:var(--fg-dim); font-size:.95rem; margin-top:18px; }
+  .why-flow .step { background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:8px 14px; }
+  .why-flow .arrow { color: var(--accent2); font-weight:700; }
+
+  footer { padding: 40px 0 60px; text-align:center; color: var(--fg-dim); font-size:.9rem; }
+  footer a { color: var(--fg-dim); }
+  .pill { display:inline-block; font-size:.78rem; color:var(--fg-dim); border:1px solid var(--border);
+    border-radius:999px; padding:3px 11px; margin:3px; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="badge-row">
+      <img alt="PyPI" src="https://img.shields.io/pypi/v/amd-smi-wsl?color=ed1c24&label=PyPI" />
+      <img alt="Python" src="https://img.shields.io/pypi/pyversions/amd-smi-wsl?color=ff7a18" />
+      <img alt="License" src="https://img.shields.io/badge/license-MIT-3fb950" />
+    </div>
+    <h1><span class="mono">amd-smi-wsl</span></h1>
+    <p class="tagline">
+      A <strong>drop-in replacement</strong> for the <code>amdsmi</code> Python package that works inside
+      <strong>WSL2&nbsp;/&nbsp;Windows</strong> — where the native AMD SMI library can't run — so
+      <strong>vLLM</strong> and other ROCm tools detect your GPU and start cleanly.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/JoursBleu/amd-smi-wsl">View on GitHub</a>
+      <a class="btn" href="https://pypi.org/project/amd-smi-wsl/">View on PyPI</a>
+    </div>
+    <div class="install">
+      <code id="pipcmd">pip install amd-smi-wsl</code>
+      <button class="copy-btn" onclick="copyPip()">Copy</button>
+    </div>
+  </div>
+</header>
+
+<section id="why">
+  <div class="wrap">
+    <h2>Why it exists</h2>
+    <p class="sub">On WSL2 the GPU is exposed through DirectX para-virtualisation — not the native KFD driver.</p>
+    <p style="color:var(--fg-dim); max-width:760px;">
+      Under WSL2 the AMD GPU is reached through <code>/dev/dxg</code> + <code>dxgkrnl</code>, <strong>not</strong>
+      the native <code>amdgpu</code> KFD driver. The Linux <code>/dev/kfd</code> device and its sysfs topology
+      simply do not exist, so <code>import amdsmi</code> fails and downstream tools crash during ROCm platform
+      detection — even though the HIP runtime itself works perfectly.
+    </p>
+    <div class="why-flow">
+      <span class="step">native <code>amdsmi</code> import ✗</span>
+      <span class="arrow">→</span>
+      <span class="step">ROCm platform detection ✗</span>
+      <span class="arrow">→</span>
+      <span class="step">vLLM startup crash 💥</span>
+    </div>
+    <div class="why-flow" style="margin-top:10px;">
+      <span class="step">install <code>amd-smi-wsl</code> ✓</span>
+      <span class="arrow">→</span>
+      <span class="step">queries answered via HIP + Windows interop ✓</span>
+      <span class="arrow">→</span>
+      <span class="step">vLLM runs 🚀</span>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>What it does</h2>
+    <p class="sub">Binary-compatible import surface, real answers where the platform allows.</p>
+    <div class="grid">
+      <div class="card">
+        <span class="ico">🔌</span>
+        <h3>100% import-compatible</h3>
+        <p>Exposes every public symbol of the upstream binding — all <strong>190</strong> <code>amdsmi_*</code>
+        functions, all enums and the full exception hierarchy. <code>import amdsmi</code> just works.</p>
+      </div>
+      <div class="card">
+        <span class="ico">🧠</span>
+        <h3>Real data sources</h3>
+        <p>Device name, GCN arch, VRAM, compute units, UUID and live memory come from <code>torch.cuda</code> (HIP);
+        PCI id, subsystem id, revision and driver info come from Windows interop.</p>
+      </div>
+      <div class="card">
+        <span class="ico">♻️</span>
+        <h3>torch re-entrancy safe</h3>
+        <p>PyTorch's ROCm build counts devices <em>through</em> amdsmi. A thread-local guard breaks the
+        recursion so <code>torch</code> falls back to its native HIP device count.</p>
+      </div>
+      <div class="card">
+        <span class="ico">🎯</span>
+        <h3>vLLM canonical names</h3>
+        <p>Returns <code>device_id</code> as a hex string (<code>"0x1586"</code>) so vLLM resolves the
+        canonical name from its device map, e.g. <code>AMD_Radeon_8060S</code>.</p>
+      </div>
+      <div class="card">
+        <span class="ico">🧪</span>
+        <h3>Honest stubs</h3>
+        <p>Features the platform genuinely lacks (RAS/ECC, partitioning, set-mutators, events…) raise
+        <code>AMDSMI_STATUS_NOT_SUPPORTED</code> — exactly like the native library.</p>
+      </div>
+      <div class="card">
+        <span class="ico">📦</span>
+        <h3>Zero hard deps</h3>
+        <p>Pure-Python, no compiled extensions. <code>torch</code> is expected to be present already and is
+        intentionally not pinned, so it never fights your ROCm install.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="quickstart">
+  <div class="wrap">
+    <h2>Quickstart</h2>
+    <p class="sub">Install where the real amdsmi can't run, then use it like the original.</p>
+<pre class="code"><span class="k">import</span> amdsmi            <span class="c"># this package, not the native one</span>
+
+amdsmi.<span class="f">amdsmi_init</span>()
+h = amdsmi.<span class="f">amdsmi_get_processor_handles</span>()[<span class="s">0</span>]
+info = amdsmi.<span class="f">amdsmi_get_gpu_asic_info</span>(h)
+<span class="f">print</span>(info[<span class="s">"market_name"</span>])   <span class="c"># AMD Radeon(TM) 8060S Graphics</span>
+<span class="f">print</span>(info[<span class="s">"device_id"</span>])     <span class="c"># 0x1586</span>
+</pre>
+    <p style="color:var(--fg-dim); margin-top:8px;">
+      Set <code>AMDSMI_WSL_DISABLE=1</code> to make <code>amdsmi_init()</code> raise
+      <code>NOT_SUPPORTED</code> for testing a caller's fallback path.
+    </p>
+  </div>
+</section>
+
+<section id="verified">
+  <div class="wrap">
+    <h2>Verified end-to-end</h2>
+    <p class="sub">WSL2 + AMD Radeon 8060S (Strix Halo, gfx1151) + ROCm 7.2.4 + PyTorch 2.9.1</p>
+    <table>
+      <tr><th>Check</th><th>Result</th></tr>
+      <tr><td><code>import amdsmi</code> + <code>amdsmi_init()</code></td><td class="ok">OK (no recursion)</td></tr>
+      <tr><td><code>asic_info["market_name"]</code></td><td class="ok">AMD Radeon(TM) 8060S Graphics</td></tr>
+      <tr><td><code>asic_info["device_id"]</code></td><td class="ok">0x1586</td></tr>
+      <tr><td><code>target_graphics_version</code></td><td class="ok">gfx1151</td></tr>
+      <tr><td>test suite (<code>pytest</code>)</td><td class="ok">16 passed</td></tr>
+      <tr><td>vLLM <code>rocm_platform_plugin()</code></td><td class="ok">RocmPlatform</td></tr>
+      <tr><td>vLLM <code>get_device_name(0)</code></td><td class="ok">AMD_Radeon_8060S</td></tr>
+      <tr><td>vLLM <code>is_fully_connected([0])</code></td><td class="ok">True</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="topics" style="border-bottom:none;">
+  <div class="wrap" style="text-align:center;">
+    <h2>Topics</h2>
+    <p class="sub">&nbsp;</p>
+    <div>
+      <span class="pill">amdsmi</span><span class="pill">amd-smi</span><span class="pill">rocm</span>
+      <span class="pill">wsl2</span><span class="pill">wsl</span><span class="pill">hip</span>
+      <span class="pill">gpu</span><span class="pill">vllm</span><span class="pill">strix-halo</span>
+      <span class="pill">gfx1151</span><span class="pill">radeon</span><span class="pill">pytorch</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>
+      <a href="https://github.com/JoursBleu/amd-smi-wsl">GitHub</a> ·
+      <a href="https://pypi.org/project/amd-smi-wsl/">PyPI</a> ·
+      <a href="https://github.com/JoursBleu/amd-smi-wsl/blob/main/CHANGELOG.md">Changelog</a> ·
+      <a href="https://github.com/JoursBleu/amd-smi-wsl/blob/main/LICENSE">MIT License</a>
+    </p>
+    <p>
+      Status constants, enum values and exception classes are derived from the
+      MIT-licensed <a href="https://github.com/ROCm/amdsmi">ROCm/amdsmi</a> project.
+    </p>
+  </div>
+</footer>
+
+<script>
+  function copyPip() {
+    navigator.clipboard.writeText("pip install amd-smi-wsl").then(function () {
+      var b = document.querySelector(".copy-btn");
+      var t = b.textContent; b.textContent = "Copied!";
+      setTimeout(function () { b.textContent = t; }, 1400);
+    });
+  }
+</script>
+</body>
+</html>

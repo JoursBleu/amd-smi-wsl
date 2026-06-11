@@ -19,7 +19,14 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: System :: Hardware",
+    "Topic :: System :: Monitoring",
+    "Typing :: Typed",
 ]
 dependencies = []
 
@@ -30,7 +37,8 @@ dependencies = []
 test = ["pytest"]
 
 [project.urls]
-Homepage = "https://github.com/JoursBleu/amd-smi-wsl"
+Homepage = "https://joursbleu.github.io/amd-smi-wsl/"
+Documentation = "https://joursbleu.github.io/amd-smi-wsl/"
 Repository = "https://github.com/JoursBleu/amd-smi-wsl"
 Issues = "https://github.com/JoursBleu/amd-smi-wsl/issues"
 Changelog = "https://github.com/JoursBleu/amd-smi-wsl/blob/main/CHANGELOG.md"
