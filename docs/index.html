@@ -119,7 +119,8 @@
     <p class="tagline">
       A <strong>drop-in replacement</strong> for the <code>amdsmi</code> Python package that works inside
       <strong>WSL2&nbsp;/&nbsp;Windows</strong> — where the native AMD SMI library can't run — so
-      <strong>vLLM</strong> and other ROCm tools detect your GPU and start cleanly.
+      <strong>vLLM</strong> and other ROCm tools detect your GPU and start cleanly. Works across
+      <strong>RDNA-generation Radeon / Radeon&nbsp;PRO GPUs and Ryzen&nbsp;AI APUs</strong> on WSL2.
     </p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/JoursBleu/amd-smi-wsl">View on GitHub</a>
@@ -137,10 +138,12 @@
     <h2>Why it exists</h2>
     <p class="sub">On WSL2 the GPU is exposed through DirectX para-virtualisation — not the native KFD driver.</p>
     <p style="color:var(--fg-dim); max-width:760px;">
-      Under WSL2 the AMD GPU is reached through <code>/dev/dxg</code> + <code>dxgkrnl</code>, <strong>not</strong>
-      the native <code>amdgpu</code> KFD driver. The Linux <code>/dev/kfd</code> device and its sysfs topology
-      simply do not exist, so <code>import amdsmi</code> fails and downstream tools crash during ROCm platform
-      detection — even though the HIP runtime itself works perfectly.
+      Under WSL2 <strong>any</strong> AMD GPU is reached through <code>/dev/dxg</code> + <code>dxgkrnl</code>,
+      <strong>not</strong> the native <code>amdgpu</code> KFD driver. The Linux <code>/dev/kfd</code> device and
+      its sysfs topology simply do not exist, so <code>import amdsmi</code> fails and downstream tools crash
+      during ROCm platform detection — even though the HIP runtime itself works perfectly. Because this is a
+      property of the WSL2 stack, it affects Radeon / Radeon&nbsp;PRO GPUs and Ryzen&nbsp;AI APUs alike, across
+      RDNA generations.
     </p>
     <div class="why-flow">
       <span class="step">native <code>amdsmi</code> import ✗</span>
@@ -226,7 +229,7 @@ info = amdsmi.<span class="f">amdsmi_get_gpu_asic_info</span>(h)
 <section id="verified">
   <div class="wrap">
     <h2>Verified end-to-end</h2>
-    <p class="sub">WSL2 + AMD Radeon 8060S (Strix Halo, gfx1151) + ROCm 7.2.4 + PyTorch 2.9.1</p>
+    <p class="sub">GPU-agnostic by design — validated on WSL2 + AMD Radeon 8060S (Strix Halo, gfx1151) + ROCm 7.2.4 + PyTorch 2.9.1; device-specific values differ on other cards.</p>
     <table>
       <tr><th>Check</th><th>Result</th></tr>
       <tr><td><code>import amdsmi</code> + <code>amdsmi_init()</code></td><td class="ok">OK (no recursion)</td></tr>

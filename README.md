@@ -3,6 +3,13 @@
 A **drop-in replacement for the `amdsmi` Python package** that works inside
 **WSL2 / Windows**, where the native AMD SMI library cannot run.
 
+This is a property of the WSL2 GPU stack rather than of any single card, so it
+applies broadly to AMD GPUs used with ROCm under WSL2 — across RDNA
+generations (e.g. RDNA3 / RDNA3.5 / RDNA4 desktop Radeon and Radeon PRO cards,
+as well as Ryzen AI APUs). The data sources it builds on (the HIP runtime and
+Windows interop) are GPU-agnostic; only the per-device details (PCI id, market
+name, gfx arch) differ from card to card.
+
 ```python
 import amdsmi            # this package, not the native one
 amdsmi.amdsmi_init()
@@ -12,9 +19,10 @@ print(amdsmi.amdsmi_get_gpu_asic_info(h)["market_name"])
 
 ## Why
 
-On WSL2 the AMD GPU is exposed through DirectX para-virtualisation
+On WSL2 **any** AMD GPU is exposed through DirectX para-virtualisation
 (`/dev/dxg` + `dxgkrnl`), **not** the native `amdgpu` KFD driver. The Linux
-`/dev/kfd` device and its sysfs topology simply do not exist, so:
+`/dev/kfd` device and its sysfs topology simply do not exist, so — regardless
+of which Radeon / Ryzen GPU you have:
 
 - `import amdsmi` (native) fails / `amdsmi_init()` raises, and
 - downstream code such as **vLLM** then fails ROCm platform detection and
@@ -97,8 +105,12 @@ rocm._GCN_ARCH                      # -> 'gfx1151'
 
 ## Verified environment
 
-Validated end-to-end on **WSL2 + AMD Radeon 8060S (Strix Halo, gfx1151) +
-ROCm 7.2.4 + PyTorch 2.9.1**:
+The mechanism is GPU-agnostic (it only relies on the HIP runtime + Windows
+interop, which behave the same for any Radeon / Ryzen GPU under WSL2). The
+numbers below are from one fully validated end-to-end setup — **WSL2 + AMD
+Radeon 8060S (Strix Halo, gfx1151) + ROCm 7.2.4 + PyTorch 2.9.1** — and the
+device-specific values (name, `device_id`, gfx arch) will naturally differ on
+other cards:
 
 | Check | Result |
 | --- | --- |
