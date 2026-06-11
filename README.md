@@ -98,8 +98,21 @@ rocm._GCN_ARCH                      # -> 'gfx1151'
 ## Verified environment
 
 Validated end-to-end on **WSL2 + AMD Radeon 8060S (Strix Halo, gfx1151) +
-ROCm 7.2.4 + PyTorch 2.9.1**: `import amdsmi` works, the full test suite
-passes, and vLLM ROCm platform detection / device naming succeed.
+ROCm 7.2.4 + PyTorch 2.9.1**:
+
+| Check | Result |
+| --- | --- |
+| `import amdsmi` + `amdsmi_init()` | OK (no recursion) |
+| `amdsmi_get_gpu_asic_info()["market_name"]` | `AMD Radeon(TM) 8060S Graphics` |
+| `amdsmi_get_gpu_asic_info()["device_id"]` | `0x1586` (hex string) |
+| `target_graphics_version` | `gfx1151` |
+| test suite (`pytest`) | **16 passed** |
+| vLLM `rocm_platform_plugin()` | `vllm.platforms.rocm.RocmPlatform` |
+| vLLM `RocmPlatform.get_device_name(0)` | `AMD_Radeon_8060S` |
+| vLLM `is_fully_connected([0])` | `True` |
+
+Telemetry that the platform does not expose (`clock_info`, `temp_metric`,
+`power_info`, `gpu_activity`) raises `AMDSMI_STATUS_NOT_SUPPORTED`, as expected.
 
 ## License
 

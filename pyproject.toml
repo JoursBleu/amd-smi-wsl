@@ -9,7 +9,7 @@ description = "Drop-in amdsmi replacement for WSL2 / Windows (HIP + Windows inte
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "kangletian", email = "Letian.Kang@amd.com" }]
+authors = [{ name = "JoursBleu" }]
 keywords = ["amdsmi", "amd-smi", "rocm", "wsl2", "wsl", "hip", "gpu", "vllm"]
 classifiers = [
     "Development Status :: 4 - Beta",
