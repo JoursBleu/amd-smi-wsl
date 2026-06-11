@@ -31,7 +31,7 @@ from ._exceptions import (
 )
 from ._handles import CpuHandle, GpuHandle, SocketHandle
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 _initialized = False
 
@@ -41,6 +41,16 @@ _initialized = False
 # --------------------------------------------------------------------------- #
 def _not_supported(name: str):
     raise AmdSmiLibraryException(C.AMDSMI_STATUS_NOT_SUPPORTED)
+
+
+def _pad_hex(value: int, width: int) -> str:
+    """Format an int as a lowercase ``0x``-prefixed string, zero-padded to
+    ``width`` hex digits -- matching the upstream amdsmi output convention
+    (e.g. ``0x1586``, ``0xc1``)."""
+    try:
+        return "0x" + format(int(value), "0{}x".format(width))
+    except Exception:
+        return "0x" + "0" * width
 
 
 def _require_init() -> None:
@@ -74,6 +84,12 @@ def _torch():
 def amdsmi_init(flag=AmdSmiInitFlags.INIT_AMD_GPUS):
     global _initialized
     if backend.env_disabled():
+        raise AmdSmiLibraryException(C.AMDSMI_STATUS_NOT_SUPPORTED)
+    if backend.is_probing():
+        # Re-entrant call triggered by torch's own device-count resolution
+        # (torch ROCm counts devices via amdsmi).  Raise an AmdSmiException so
+        # torch falls back to its native HIP device count instead of recursing
+        # back into this package forever.
         raise AmdSmiLibraryException(C.AMDSMI_STATUS_NOT_SUPPORTED)
     backend.reset_cache()
     if not backend.available():
@@ -146,18 +162,21 @@ def amdsmi_get_processor_handle_from_bdf(bdf):
 # --------------------------------------------------------------------------- #
 def amdsmi_get_gpu_asic_info(processor_handle):
     g = _gpu(processor_handle)
+    # Identity fields are formatted as lowercase hex strings to match the
+    # upstream amdsmi contract (vLLM looks ``device_id`` up in its hex-keyed
+    # _ROCM_DEVICE_ID_NAME_MAP, so it must be e.g. "0x1586", not an int).
     return {
-        "market_name": g.market_name or g.name,
-        "vendor_id": g.vendor_id,
-        "vendor_name": dm.AMD_VENDOR_NAME,
-        "subvendor_id": g.subsystem_id,
-        "device_id": g.device_id,
-        "rev_id": g.rev_id,
+        "market_name": g.market_name or g.name or "N/A",
+        "vendor_id": _pad_hex(g.vendor_id, 4) if g.vendor_id else "N/A",
+        "vendor_name": dm.AMD_VENDOR_NAME.replace(",", ""),
+        "subvendor_id": _pad_hex(g.subsystem_id, 4),
+        "device_id": _pad_hex(g.device_id, 4) if g.device_id else "N/A",
+        "rev_id": _pad_hex(g.rev_id, 2),
         "asic_serial": g.uuid,
         "oam_id": g.index,
         "num_compute_units": g.num_compute_units,
         "target_graphics_version": g.gcn_arch,
-        "subsystem_id": g.subsystem_id,
+        "subsystem_id": _pad_hex(g.subsystem_id, 4),
     }
 
 
@@ -242,7 +261,7 @@ def amdsmi_get_gpu_id(processor_handle):
 
 
 def amdsmi_get_gpu_revision(processor_handle):
-    return hex(_gpu(processor_handle).rev_id)
+    return _pad_hex(_gpu(processor_handle).rev_id, 2)
 
 
 def amdsmi_get_gpu_vendor_name(processor_handle):
@@ -251,7 +270,7 @@ def amdsmi_get_gpu_vendor_name(processor_handle):
 
 
 def amdsmi_get_gpu_subsystem_id(processor_handle):
-    return _gpu(processor_handle).subsystem_id
+    return _pad_hex(_gpu(processor_handle).subsystem_id, 4)
 
 
 def amdsmi_get_gpu_subsystem_name(processor_handle):
@@ -301,16 +320,27 @@ def amdsmi_get_gpu_topo_numa_affinity(processor_handle):
 
 # --------------------------------------------------------------------------- #
 # live telemetry (best-effort via torch; NOT_SUPPORTED when unavailable)
+#
+# torch ROCm resolves these sensors *through amdsmi itself*, so calling them
+# from inside this package can re-enter us.  Every torch telemetry call is run
+# under the backend re-entrancy guard and any failure degrades to a clean
+# AMDSMI_STATUS_NOT_SUPPORTED -- which is the honest answer on WSL2, where
+# per-sensor clock/temp/power telemetry is not exposed.
 # --------------------------------------------------------------------------- #
+def _torch_metric(fn):
+    torch = _torch()
+    if torch is None or backend.is_probing():
+        return None
+    try:
+        with backend.reentry_guard():
+            return fn(torch)
+    except BaseException:
+        return None
+
+
 def amdsmi_get_gpu_activity(processor_handle):
     g = _gpu(processor_handle)
-    torch = _torch()
-    gfx = None
-    if torch is not None:
-        try:
-            gfx = int(torch.cuda.utilization(g.index))
-        except Exception:
-            gfx = None
+    gfx = _torch_metric(lambda t: int(t.cuda.utilization(g.index)))
     if gfx is None:
         raise AmdSmiLibraryException(C.AMDSMI_STATUS_NOT_SUPPORTED)
     return {"gfx_activity": gfx, "umc_activity": 0, "mm_activity": 0}
@@ -318,13 +348,7 @@ def amdsmi_get_gpu_activity(processor_handle):
 
 def amdsmi_get_clock_info(processor_handle, clock_type=AmdSmiClkType.SYS):
     g = _gpu(processor_handle)
-    torch = _torch()
-    cur = None
-    if torch is not None:
-        try:
-            cur = int(torch.cuda.clock_rate(g.index))  # MHz
-        except Exception:
-            cur = None
+    cur = _torch_metric(lambda t: int(t.cuda.clock_rate(g.index)))  # MHz
     if cur is None:
         raise AmdSmiLibraryException(C.AMDSMI_STATUS_NOT_SUPPORTED)
     return {"cur_clk": cur, "max_clk": cur, "min_clk": 0, "sleep_clk": 0}
@@ -336,24 +360,15 @@ def amdsmi_get_temp_metric(
     metric=AmdSmiTemperatureMetric.CURRENT,
 ):
     g = _gpu(processor_handle)
-    torch = _torch()
-    if torch is not None:
-        try:
-            return int(torch.cuda.temperature(g.index))
-        except Exception:
-            pass
-    raise AmdSmiLibraryException(C.AMDSMI_STATUS_NOT_SUPPORTED)
+    temp = _torch_metric(lambda t: int(t.cuda.temperature(g.index)))
+    if temp is None:
+        raise AmdSmiLibraryException(C.AMDSMI_STATUS_NOT_SUPPORTED)
+    return temp
 
 
 def amdsmi_get_power_info(processor_handle, *args, **kwargs):
     g = _gpu(processor_handle)
-    torch = _torch()
-    watts = None
-    if torch is not None:
-        try:
-            watts = int(torch.cuda.power_draw(g.index) / 1000)  # mW -> W
-        except Exception:
-            watts = None
+    watts = _torch_metric(lambda t: int(t.cuda.power_draw(g.index) / 1000))  # mW->W
     if watts is None:
         raise AmdSmiLibraryException(C.AMDSMI_STATUS_NOT_SUPPORTED)
     return {

@@ -31,6 +31,12 @@ This package restores the `amdsmi` import surface and re-implements the
 | Windows interop (`Get-CimInstance Win32_VideoController`) | real PCI device id, subsystem id, revision, driver version/date |
 | Static `gfx -> metadata` table | marketing name / VRAM type / device id fallbacks |
 
+> **Note on `torch` re-entrancy.** PyTorch's ROCm build resolves its device
+> count *through* `amdsmi` itself. Since this package replaces `amdsmi`, a
+> naive probe would recurse (`amdsmi_init` -> `torch.cuda` -> `amdsmi_init` ...).
+> A thread-local re-entrancy guard breaks that cycle so `torch` falls back to
+> its native HIP device count. See the v0.2.0 entry in the changelog.
+
 ## API coverage
 
 The package exposes **every** public symbol of the upstream binding —
@@ -76,6 +82,24 @@ This package makes the native-`amdsmi` code paths in vLLM's
 `vllm/platforms/rocm.py` and `vllm/platforms/__init__.py` work unchanged on
 WSL2, as an alternative to patching vLLM with `torch.cuda` fallbacks
 (cf. vLLM PR #37189).
+
+With this package installed, vLLM resolves the **canonical** device name from
+its hex-keyed `_ROCM_DEVICE_ID_NAME_MAP` (because `asic_info["device_id"]` is
+returned as a lowercase hex string such as `"0x1586"`), e.g.:
+
+```python
+from vllm.platforms import rocm_platform_plugin
+import vllm.platforms.rocm as rocm
+rocm_platform_plugin()              # -> 'vllm.platforms.rocm.RocmPlatform'
+rocm.RocmPlatform.get_device_name(0)  # -> 'AMD_Radeon_8060S'
+rocm._GCN_ARCH                      # -> 'gfx1151'
+```
+
+## Verified environment
+
+Validated end-to-end on **WSL2 + AMD Radeon 8060S (Strix Halo, gfx1151) +
+ROCm 7.2.4 + PyTorch 2.9.1**: `import amdsmi` works, the full test suite
+passes, and vLLM ROCm platform detection / device naming succeed.
 
 ## License
 

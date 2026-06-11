@@ -19,13 +19,70 @@ raises; missing fields are simply left unset.
 
 from __future__ import annotations
 
+import contextlib
+import datetime
 import functools
 import os
 import re
 import subprocess
+import threading
+import warnings
 from dataclasses import dataclass, field
 
 from . import _device_map as dm
+
+# Re-entrancy guard (thread-local).  On torch ROCm builds, torch.cuda's device
+# enumeration resolves the device count by calling amdsmi.amdsmi_init() +
+# amdsmi_get_processor_handles().  Because this package *is* ``amdsmi``, probing
+# torch from inside discovery would recurse straight back into us.  While a
+# probe is in flight we set ``_reentry.active`` so the re-entrant
+# ``amdsmi_init()`` raises (see ``_interface.amdsmi_init``) and torch falls back
+# to its native HIP device count instead of recursing forever.
+_reentry = threading.local()
+
+
+def is_probing() -> bool:
+    """True while ``_torch_probe`` is calling into ``torch.cuda``."""
+    return bool(getattr(_reentry, "active", False))
+
+
+@contextlib.contextmanager
+def reentry_guard():
+    """Mark a torch.cuda call in flight so any re-entrant amdsmi call coming
+    back from torch (device-count or telemetry on ROCm route through amdsmi)
+    short-circuits instead of recursing."""
+    prev = getattr(_reentry, "active", False)
+    _reentry.active = True
+    try:
+        yield
+    finally:
+        _reentry.active = prev
+
+
+def _is_degenerate_uuid(uuid: str) -> bool:
+    """torch reports a placeholder UUID on WSL2 (all-zero / single repeated
+    nibble, e.g. ``66666666-6666-...``). Treat those as absent so a stable id
+    is synthesized instead."""
+    if not uuid:
+        return True
+    hexed = uuid.replace("-", "").replace("GPU", "").strip().lower()
+    return len(set(hexed)) <= 1
+
+
+def _parse_wmi_date(raw) -> str:
+    """WMI/CIM serializes dates as ``/Date(1771286400000)/`` (ms since epoch,
+    optional ``+0000`` offset). Return a clean ``YYYY-MM-DD`` string."""
+    if not raw:
+        return ""
+    m = re.search(r"/Date\((-?\d+)", str(raw))
+    if not m:
+        return str(raw)
+    try:
+        return datetime.datetime.fromtimestamp(
+            int(m.group(1)) / 1000.0, datetime.timezone.utc
+        ).strftime("%Y-%m-%d")
+    except Exception:
+        return ""
 
 
 @dataclass
@@ -67,11 +124,26 @@ def _torch_probe() -> list[GpuInfo]:
         import torch
     except Exception:
         return []
-    if not (getattr(torch.version, "hip", None) and torch.cuda.is_available()):
+    if not getattr(torch.version, "hip", None):
+        return []
+
+    # Guard against the torch<->amdsmi device-count recursion described above.
+    if is_probing():
+        return []
+    try:
+        # torch may emit "Can't initialize amdsmi" here as it falls back to
+        # its native HIP device count -- that fallback is exactly what we want,
+        # so silence the cosmetic warning.
+        with reentry_guard(), warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if not torch.cuda.is_available():
+                return []
+            device_count = torch.cuda.device_count()
+    except Exception:
         return []
 
     gpus: list[GpuInfo] = []
-    for i in range(torch.cuda.device_count()):
+    for i in range(device_count):
         info = GpuInfo(index=i)
         try:
             props = torch.cuda.get_device_properties(i)
@@ -92,7 +164,7 @@ def _torch_probe() -> list[GpuInfo]:
             info.major = int(getattr(props, "major", 0) or 0)
             info.minor = int(getattr(props, "minor", 0) or 0)
             uuid = getattr(props, "uuid", None)
-            if uuid is not None:
+            if uuid is not None and not _is_degenerate_uuid(str(uuid)):
                 info.uuid = str(uuid)
         gpus.append(info)
     return gpus
@@ -106,8 +178,25 @@ _PNP_RE = re.compile(
     r"(?:&REV_(?P<rev>[0-9A-Fa-f]{2}))?"
 )
 
+# Persistent cache for the Windows interop probe (static PCI metadata).
+_WIN_PROBE_CACHE: "list[dict] | None" = None
+
 
 def _windows_probe() -> list[dict]:
+    """Query Win32_VideoController through WSL interop, cached persistently.
+
+    PCI metadata is static for the machine, and vLLM's ``with_amdsmi_context``
+    resets the discovery cache around *every* call -- so without a persistent
+    cache here we would spawn powershell.exe repeatedly (~1s each).
+    """
+    global _WIN_PROBE_CACHE
+    if _WIN_PROBE_CACHE is not None:
+        return _WIN_PROBE_CACHE
+    _WIN_PROBE_CACHE = _windows_probe_uncached()
+    return _WIN_PROBE_CACHE
+
+
+def _windows_probe_uncached() -> list[dict]:
     """Query Win32_VideoController through WSL interop. Best-effort."""
     if not is_wsl():
         return []
@@ -153,7 +242,7 @@ def _windows_probe() -> list[dict]:
             "name": entry.get("Name") or "",
             "vendor_id": ven or dm.AMD_VENDOR_ID,
             "driver_version": entry.get("DriverVersion") or "",
-            "driver_date": str(entry.get("DriverDate") or ""),
+            "driver_date": _parse_wmi_date(entry.get("DriverDate")),
             "adapter_ram": int(entry.get("AdapterRAM") or 0),
         }
         if m:
@@ -221,6 +310,12 @@ def discover() -> tuple[GpuInfo, ...]:
 
 def reset_cache() -> None:
     discover.cache_clear()
+
+
+def reset_windows_probe_cache() -> None:
+    """Drop the persistent Windows-interop cache (mainly for tests)."""
+    global _WIN_PROBE_CACHE
+    _WIN_PROBE_CACHE = None
 
 
 def available() -> bool:
