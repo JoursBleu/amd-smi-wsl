@@ -19,6 +19,19 @@ def test_full_function_parity():
         assert callable(getattr(amdsmi, name))
 
 
+def test_namespace_is_clean():
+    # No private/internal aliases should leak into the public package namespace.
+    assert not hasattr(amdsmi, "amdsmi_wrapper")
+    # Every public amdsmi_* attribute must be callable (no stray modules).
+    for n in dir(amdsmi):
+        if n.startswith("amdsmi_"):
+            assert callable(getattr(amdsmi, n)), f"{n} is not callable"
+    # __all__ has no duplicates and every entry resolves.
+    assert len(amdsmi.__all__) == len(set(amdsmi.__all__))
+    for n in amdsmi.__all__:
+        assert hasattr(amdsmi, n), f"__all__ entry missing: {n}"
+
+
 def test_enums_present_and_valued():
     assert int(amdsmi.AmdSmiStatus.NOT_SUPPORTED) == 2
     assert int(amdsmi.AmdSmiProcessorType.AMD_GPU) >= 0

@@ -57,6 +57,12 @@ def _enum_names() -> list[str]:
     return [n for n in dir(_enums_mod) if n.startswith("AmdSmi")]
 
 
+# `from ._enums import *` pulls in the module's internal ``_constants`` alias
+# (``amdsmi_wrapper``) because that submodule defines no ``__all__``. Drop it so
+# the public package namespace stays clean (it was never part of ``__all__``).
+globals().pop("amdsmi_wrapper", None)
+
+
 __all__ = (
     [
         "AmdSmiException",
