@@ -1,21 +1,62 @@
-# amd-smi-wsl
+<div align="center">
 
-A **drop-in replacement for the `amdsmi` Python package** that works inside
-**WSL2 / Windows**, where the native AMD SMI library cannot run.
+# `amd-smi-wsl`
 
-This is a property of the WSL2 GPU stack rather than of any single card, so it
-applies broadly to AMD GPUs used with ROCm under WSL2 — across RDNA
-generations (e.g. RDNA3 / RDNA3.5 / RDNA4 desktop Radeon and Radeon PRO cards,
-as well as Ryzen AI APUs). The data sources it builds on (the HIP runtime and
-Windows interop) are GPU-agnostic; only the per-device details (PCI id, market
-name, gfx arch) differ from card to card.
+### Drop-in `amdsmi` for AMD GPUs on WSL2 — so vLLM, PyTorch ROCm & friends just work
+
+[![PyPI](https://img.shields.io/pypi/v/amd-smi-wsl?color=ed1c24&label=PyPI)](https://pypi.org/project/amd-smi-wsl/)
+[![Python](https://img.shields.io/pypi/pyversions/amd-smi-wsl?color=ff7a18)](https://pypi.org/project/amd-smi-wsl/)
+[![License](https://img.shields.io/badge/license-MIT-3fb950)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-WSL2%20%7C%20ROCm-0a7bbb)](https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/compatibility/compatibilityrad/wsl/wsl_compatibility.html)
+
+**[Website](https://joursbleu.github.io/amd-smi-wsl/)** · **[PyPI](https://pypi.org/project/amd-smi-wsl/)** · **[Changelog](CHANGELOG.md)** · **[Issues](https://github.com/JoursBleu/amd-smi-wsl/issues)** · **[ROCm/amdsmi](https://github.com/ROCm/amdsmi)**
+
+</div>
+
+---
+
+On **WSL2** an AMD GPU is exposed through DirectX para-virtualisation
+(`/dev/dxg`), **not** the native `amdgpu` KFD driver — so `/dev/kfd` doesn't
+exist and `import amdsmi` fails, which breaks ROCm platform detection in tools
+like **vLLM**. `amd-smi-wsl` restores the `amdsmi` import surface using data
+sources that *do* work under WSL2 (the HIP runtime + Windows interop), so those
+tools start cleanly — **no patching required**.
+
+This is a property of the WSL2 GPU stack, not of any single card, so it applies
+broadly across **RDNA generations** (RDNA3 / RDNA3.5 / RDNA4 desktop Radeon &
+Radeon PRO, and Ryzen AI APUs).
 
 ```python
 import amdsmi            # this package, not the native one
 amdsmi.amdsmi_init()
 h = amdsmi.amdsmi_get_processor_handles()[0]
 print(amdsmi.amdsmi_get_gpu_asic_info(h)["market_name"])
+# -> AMD Radeon(TM) 8060S Graphics
 ```
+
+## ✨ Highlights
+
+- **🔌 100% import-compatible** — every public symbol of the upstream binding:
+  all **190** `amdsmi_*` functions, all enums, and the full exception hierarchy.
+- **🧠 Real data, not fakes** — device name, gfx arch, VRAM, compute units, UUID
+  and live memory from `torch.cuda` (HIP); PCI id, subsystem id, revision and
+  driver info from Windows interop.
+- **♻️ torch re-entrancy safe** — a thread-local guard breaks the
+  `amdsmi_init → torch.cuda → amdsmi_init` recursion that PyTorch's ROCm build
+  would otherwise trigger.
+- **🎯 vLLM canonical names** — returns `device_id` as a hex string (`"0x1586"`)
+  so vLLM resolves the canonical name (e.g. `AMD_Radeon_8060S`).
+- **🧪 Honest `NOT_SUPPORTED` stubs** for features the platform genuinely lacks
+  (RAS/ECC, partitioning, `set_*`, events…), exactly like the native library.
+- **📦 Zero hard deps** — pure-Python, no compiled extensions; `torch` is never
+  pinned so it won't fight your ROCm install.
+
+## 🚀 Proven in production
+
+Used as the platform shim to serve a **35B vision-MoE in 4-bit AWQ
+(`Qwen3.6-35B-A3B`) on a single AMD Radeon 8060S (Strix Halo, gfx1151)** under
+WSL2 with source-built vLLM — `amd-smi-wsl` supplies the `amdsmi` surface vLLM's
+ROCm platform detection needs, end-to-end OpenAI-compatible serving included.
 
 ## Why
 
@@ -48,7 +89,7 @@ This package restores the `amdsmi` import surface and re-implements the
 ## API coverage
 
 The package exposes **every** public symbol of the upstream binding —
-all 189 `amdsmi_*` functions, all 37 `AmdSmi*` enums, and the full
+all 190 `amdsmi_*` functions, all `AmdSmi*` enums, and the full
 exception hierarchy — so `import amdsmi` is binary-compatible at the
 Python level.
 
@@ -118,7 +159,7 @@ other cards:
 | `amdsmi_get_gpu_asic_info()["market_name"]` | `AMD Radeon(TM) 8060S Graphics` |
 | `amdsmi_get_gpu_asic_info()["device_id"]` | `0x1586` (hex string) |
 | `target_graphics_version` | `gfx1151` |
-| test suite (`pytest`) | **16 passed** |
+| test suite (`pytest`) | **17 passed** |
 | vLLM `rocm_platform_plugin()` | `vllm.platforms.rocm.RocmPlatform` |
 | vLLM `RocmPlatform.get_device_name(0)` | `AMD_Radeon_8060S` |
 | vLLM `is_fully_connected([0])` | `True` |
