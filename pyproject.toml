@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "amd-smi-wsl"
-version = "0.2.0"
+version = "0.3.0"
 description = "Drop-in amdsmi replacement for WSL2 / Windows (HIP + Windows interop backed)."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "JoursBleu" }]
+authors = [{ name = "kangletian", email = "Letian.Kang@amd.com" }]
 keywords = ["amdsmi", "amd-smi", "rocm", "wsl2", "wsl", "hip", "gpu", "vllm"]
 classifiers = [
     "Development Status :: 4 - Beta",
