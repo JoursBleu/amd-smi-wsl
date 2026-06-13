@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Auto-set `HSA_ENABLE_DXG_DETECTION=1` at import time when running under WSL2
+  (unless already set, or `AMDSMI_WSL_DISABLE` is active). Without this env var
+  the HIP runtime does not enumerate the DirectX-paravirtualized GPU, so
+  `torch.cuda.is_available()` is `False` and `amdsmi_init()` raised
+  `DRIVER_NOT_LOADED`. Importing `amdsmi` is the earliest point in a typical
+  vLLM/PyTorch startup, so callers no longer have to export the variable
+  themselves. Respects an explicit `HSA_ENABLE_DXG_DETECTION=0`.
+
 ## [0.2.0] - 2026-06-11
 
 ### Fixed

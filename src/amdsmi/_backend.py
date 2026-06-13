@@ -119,6 +119,35 @@ def is_wsl() -> bool:
         return False
 
 
+def maybe_enable_wsl_gpu_detection() -> None:
+    """Auto-enable the WSL2 GPU passthrough for the HIP/HSA runtime.
+
+    On WSL2 the AMD GPU is only enumerated by the HIP runtime when
+    ``HSA_ENABLE_DXG_DETECTION=1`` is exported *before* the HIP context is
+    first created (i.e. before the first ``torch.cuda`` call). Without it
+    ``torch.cuda.is_available()`` returns ``False`` and this package — and
+    therefore vLLM / PyTorch ROCm — sees no GPU.
+
+    Setting it here, at ``import amdsmi`` time, makes the drop-in
+    self-contained so callers no longer have to remember the env var. We only
+    act when:
+
+    * the package isn't disabled (``AMDSMI_WSL_DISABLE``),
+    * we're actually inside WSL, and
+    * the caller hasn't already chosen a value (``setdefault`` respects an
+      explicit ``HSA_ENABLE_DXG_DETECTION=0``).
+
+    This is the earliest point in a typical vLLM/PyTorch startup: ``rocm.py``
+    imports ``amdsmi`` before any ``torch.cuda`` call, and ``import torch``
+    itself does not initialize HIP.
+    """
+    if env_disabled():
+        return
+    if not is_wsl():
+        return
+    os.environ.setdefault("HSA_ENABLE_DXG_DETECTION", "1")
+
+
 def _torch_probe() -> list[GpuInfo]:
     try:
         import torch
@@ -329,3 +358,8 @@ def env_disabled() -> bool:
         "true",
         "yes",
     }
+
+
+# Enable WSL2 GPU passthrough as a side effect of importing the package, before
+# anything touches the HIP runtime. See maybe_enable_wsl_gpu_detection().
+maybe_enable_wsl_gpu_detection()

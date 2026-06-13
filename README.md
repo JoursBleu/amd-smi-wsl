@@ -122,8 +122,16 @@ is therefore **not** declared as a hard dependency.
 
 ## Environment variables
 
-- `AMDSMI_WSL_DISABLE=1` — make `amdsmi_init()` raise `NOT_SUPPORTED`, useful
-  to test a caller's fallback path.
+- `HSA_ENABLE_DXG_DETECTION` — **auto-set to `1` for you.** On WSL2 the HIP/HSA
+  runtime only enumerates the DirectX-paravirtualized GPU when this is exported
+  *before* the first `torch.cuda` call. Importing this package sets it (via
+  `os.environ.setdefault`, so an explicit value you set is always respected) when
+  it detects WSL — so `import amdsmi` is self-contained and you no longer have to
+  export it by hand. Only applied inside WSL, and skipped when
+  `AMDSMI_WSL_DISABLE` is set.
+- `AMDSMI_WSL_DISABLE=1` — make `amdsmi_init()` raise `NOT_SUPPORTED` (and skip
+  the `HSA_ENABLE_DXG_DETECTION` auto-set), useful to test a caller's fallback
+  path.
 
 ## Relationship to vLLM
 
