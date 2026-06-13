@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vLLM/PyTorch startup, so callers no longer have to export the variable
   themselves. Respects an explicit `HSA_ENABLE_DXG_DETECTION=0`.
 
+### Tested
+- Verified on WSL2 + AMD Radeon 8060S (Strix Halo, gfx1151) + ROCm 7.2.4 +
+  PyTorch 2.10.0 from the published PyPI wheel: with no env var exported,
+  `import amdsmi` auto-sets `HSA_ENABLE_DXG_DETECTION=1`, `amdsmi_init()`
+  succeeds, and upstream vLLM resolves `RocmPlatform` /
+  `get_device_name(0) == "AMD_Radeon_8060S"` / `get_device_capability(0) == (11, 5)`.
+
 ## [0.2.0] - 2026-06-11
 
 ### Fixed

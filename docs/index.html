@@ -220,7 +220,10 @@ info = amdsmi.<span class="f">amdsmi_get_gpu_asic_info</span>(h)
 <span class="f">print</span>(info[<span class="s">"device_id"</span>])     <span class="c"># 0x1586</span>
 </pre>
     <p style="color:var(--fg-dim); margin-top:8px;">
-      Set <code>AMDSMI_WSL_DISABLE=1</code> to make <code>amdsmi_init()</code> raise
+      Nothing else to configure: on WSL2 the package auto-sets
+      <code>HSA_ENABLE_DXG_DETECTION=1</code> at import (before the first
+      <code>torch.cuda</code> call) so the GPU is enumerated. Set
+      <code>AMDSMI_WSL_DISABLE=1</code> to make <code>amdsmi_init()</code> raise
       <code>NOT_SUPPORTED</code> for testing a caller's fallback path.
     </p>
   </div>
@@ -229,14 +232,15 @@ info = amdsmi.<span class="f">amdsmi_get_gpu_asic_info</span>(h)
 <section id="verified">
   <div class="wrap">
     <h2>Verified end-to-end</h2>
-    <p class="sub">GPU-agnostic by design — validated on WSL2 + AMD Radeon 8060S (Strix Halo, gfx1151) + ROCm 7.2.4 + PyTorch 2.9.1; device-specific values differ on other cards.</p>
+    <p class="sub">GPU-agnostic by design — validated on WSL2 + AMD Radeon 8060S (Strix Halo, gfx1151) + ROCm 7.2.4 + PyTorch 2.10.0; device-specific values differ on other cards.</p>
     <table>
       <tr><th>Check</th><th>Result</th></tr>
       <tr><td><code>import amdsmi</code> + <code>amdsmi_init()</code></td><td class="ok">OK (no recursion)</td></tr>
+      <tr><td><code>HSA_ENABLE_DXG_DETECTION</code> auto-set on import</td><td class="ok">unset → 1</td></tr>
       <tr><td><code>asic_info["market_name"]</code></td><td class="ok">AMD Radeon(TM) 8060S Graphics</td></tr>
       <tr><td><code>asic_info["device_id"]</code></td><td class="ok">0x1586</td></tr>
       <tr><td><code>target_graphics_version</code></td><td class="ok">gfx1151</td></tr>
-      <tr><td>test suite (<code>pytest</code>)</td><td class="ok">16 passed</td></tr>
+      <tr><td>test suite (<code>pytest</code>)</td><td class="ok">17 passed</td></tr>
       <tr><td>vLLM <code>rocm_platform_plugin()</code></td><td class="ok">RocmPlatform</td></tr>
       <tr><td>vLLM <code>get_device_name(0)</code></td><td class="ok">AMD_Radeon_8060S</td></tr>
       <tr><td>vLLM <code>is_fully_connected([0])</code></td><td class="ok">True</td></tr>

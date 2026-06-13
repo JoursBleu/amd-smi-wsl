@@ -48,7 +48,9 @@ print(amdsmi.amdsmi_get_gpu_asic_info(h)["market_name"])
   so vLLM resolves the canonical name (e.g. `AMD_Radeon_8060S`).
 - **🧪 Honest `NOT_SUPPORTED` stubs** for features the platform genuinely lacks
   (RAS/ECC, partitioning, `set_*`, events…), exactly like the native library.
-- **📦 Zero hard deps** — pure-Python, no compiled extensions; `torch` is never
+- **� Self-contained on WSL2** — auto-sets `HSA_ENABLE_DXG_DETECTION=1` at import
+  so the HIP runtime enumerates the GPU with nothing to configure by hand.
+- **�📦 Zero hard deps** — pure-Python, no compiled extensions; `torch` is never
   pinned so it won't fight your ROCm install.
 
 ## 🚀 Proven in production
@@ -157,7 +159,7 @@ rocm._GCN_ARCH                      # -> 'gfx1151'
 The mechanism is GPU-agnostic (it only relies on the HIP runtime + Windows
 interop, which behave the same for any Radeon / Ryzen GPU under WSL2). The
 numbers below are from one fully validated end-to-end setup — **WSL2 + AMD
-Radeon 8060S (Strix Halo, gfx1151) + ROCm 7.2.4 + PyTorch 2.9.1** — and the
+Radeon 8060S (Strix Halo, gfx1151) + ROCm 7.2.4 + PyTorch 2.10.0** — and the
 device-specific values (name, `device_id`, gfx arch) will naturally differ on
 other cards:
 
